@@ -8,7 +8,7 @@ import (
 )
 
 func DoPing() {
-	conn, err := net.DialIP("ip:icmp", localAddr, &net.IPAddr{IP: net.IPv4(142, 250, 207, 4)})
+	conn, err := net.DialIP("ip:icmp", localAddr, &net.IPAddr{IP: net.IPv4(192, 168, 0, 1)})
 	if err != nil {
 		log.Fatal(err)
 	}
@@ -27,16 +27,19 @@ func DoPing() {
 	fmt.Printf("success %d bytes read\n", n)
 	icmpPacketWithIPHeader := buf[:n+1]
 
-	icmpPacket := peelIPHeader(icmpPacketWithIPHeader)
-	icmpPkt := parseICMPPacket(icmpPacket)
+	icmpPacketBytes := peelIPHeader(icmpPacketWithIPHeader)
+	icmpPacket := parseICMPPacket(icmpPacketBytes)
 
-	// TODO validate checksum
-	fmt.Printf("received. Type: %x, Code: %x: Checksum: %x, Identifier: %x, SequenceNumber: %x, Data: %x", icmpPkt.Type, icmpPkt.Code, icmpPkt.Checksum, icmpPkt.Identifier, icmpPkt.SequenceNumber, icmpPkt.Data)
+	if validateChecksum(icmpPacket) {
+		fmt.Printf("received. Type: %x, Code: %x: Checksum: %x, Identifier: %x, SequenceNumber: %x, Data: %x",
+			icmpPacket.Type, icmpPacket.Code, icmpPacket.Checksum, icmpPacket.Identifier, icmpPacket.SequenceNumber, icmpPacket.Data)
+	} else {
+		fmt.Println("received but invalid icmp response.")
+	}
 }
 
 // TODO: dynamic localhost ipAddr
-//var localAddr = &net.IPAddr{IP: net.IPv4(192, 168, 0, 150)}
-var localAddr = &net.IPAddr{IP: net.IPv4(172, 20, 10, 4)}
+var localAddr = &net.IPAddr{IP: net.IPv4(192, 168, 0, 150)}
 
 type ICMPPacket struct {
 	Type           []byte
@@ -58,10 +61,8 @@ func parseICMPPacket(b []byte) ICMPPacket {
 	}
 }
 
-type PingPacket ICMPPacket
-
-func NewPingICMPPacket() PingPacket {
-	pp := PingPacket{
+func NewPingICMPPacket() ICMPPacket {
+	pp := ICMPPacket{
 		Type:           []byte{0x08},
 		Code:           []byte{0x00},
 		Checksum:       []byte{0x00, 0x00},
@@ -70,12 +71,13 @@ func NewPingICMPPacket() PingPacket {
 		Data:           []byte{},
 	}
 
-	pb := pp.Marshal()
+	iPkt := ICMPPacket(pp)
+	pb := iPkt.Marshal()
 	pp.Checksum = checksum(pb)
 	return pp
 }
 
-func (p *PingPacket) Marshal() []byte {
+func (p *ICMPPacket) Marshal() []byte {
 	var b []byte
 	b = append(b, p.Type...)
 	b = append(b, p.Code...)
@@ -106,4 +108,17 @@ func peelIPHeader(b []byte) []byte {
 	// Optionヘッダは通常使われないため，今回は20byte以降をICMP packetとみなす
 	// FIXME: it can't parse with IP option header
 	return b[20:]
+}
+
+func validateChecksum(packet ICMPPacket) bool {
+	cs := packet.Checksum
+	p := ICMPPacket{
+		Type:           packet.Type,
+		Code:           packet.Code,
+		Checksum:       []byte{0x00, 0x00},
+		Identifier:     packet.Identifier,
+		SequenceNumber: packet.SequenceNumber,
+	}
+	cs2 := checksum(p.Marshal())
+	return cs[0] == cs2[0] && cs[1] == cs2[1]
 }
