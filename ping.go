@@ -5,6 +5,7 @@ import (
 	"fmt"
 	"log"
 	"net"
+	"os"
 )
 
 func DoPing() {
@@ -20,17 +21,23 @@ func DoPing() {
 	if err != nil {
 		log.Fatal(err)
 	}
-	fmt.Printf("success %d bytes write", n)
-	//buf := make([]byte, 80)
-	//n, err = conn.Read(buf)
-	//if err != nil {
-	//	log.Fatal(err)
-	//}
-	//fmt.Printf("success %d bytes read", n)
-	//fmt.Println(string(buf))
+	fmt.Printf("success %d bytes write\n", n)
+	buf := make([]byte, 80)
+	n, err = conn.Read(buf)
+	if err != nil {
+		log.Fatal(err)
+	}
+	fmt.Printf("success %d bytes read\n", n)
+	fmt.Fprintf(os.Stdout, "%x\n", buf[:n+1])
+	icmpPacketWithIPHeader := buf[:n+1]
+
+	icmpPacket := peelIPHeader(icmpPacketWithIPHeader)
+	icmpPkt := parseICMPPacket(icmpPacket)
+
+	// TODO validate checksum
+	fmt.Printf("received. Type: %x, Code: %x: Checksum: %x, Identifier: %x, SequenceNumber: %x, Data: %x", icmpPkt.Type, icmpPkt.Code, icmpPkt.Checksum, icmpPkt.Identifier, icmpPkt.SequenceNumber, icmpPkt.Data)
 }
 
-// input: remote ip
 //var localAddr = &net.IPAddr{IP: net.IPv4(192, 168, 0, 150)}
 var localAddr = &net.IPAddr{IP: net.IPv4(172, 20, 10, 4)}
 
@@ -41,6 +48,17 @@ type ICMPPacket struct {
 	Identifier     []byte
 	SequenceNumber []byte
 	Data           []byte
+}
+
+func parseICMPPacket(b []byte) ICMPPacket {
+	return ICMPPacket{
+		Type:           b[0:1],
+		Code:           b[1:2],
+		Checksum:       b[2:4],
+		Identifier:     b[4:6],
+		SequenceNumber: b[6:8],
+		Data:           b[8:],
+	}
 }
 
 type PingPacket ICMPPacket
@@ -86,44 +104,9 @@ func checksum(b []byte) []byte {
 	return cs
 }
 
-//
-//func Ping(remoteIP string) error {
-//	raddr := &net.IPAddr{IP: []byte(remoteIP)}
-//	conn, err := net.DialIP("tcp", localAddr, raddr)
-//	if err != nil {
-//		return err
-//	}
-//}
-//
-//type IPv4Packet struct {
-//	Version   []byte
-//	HeaderLen []byte
-//	DSCP      []byte // DSCP(6bit) and ECN(2bit)
-//	TotalLen  []byte
-//}
-//
-//func stringToHexStream(stream string) []byte {
-//	splitLen := 2
-//	var result []byte
-//	for i := 0; i < len(stream); i += splitLen {
-//		result = append(result, byte(string("0x"+stream[i:i+splitLen])))
-//	}
-//	return result
-//}
-
-// Internet Protocol Version 4, Src: takaAir.local (192.168.0.150), Dst: www.google.com (142.250.207.4)
-//     0100 .... = Version: 4
-//     .... 0101 = Header Length: 20 bytes (5)
-//     Differentiated Services Field: 0x00 (DSCP: CS0, ECN: Not-ECT)
-//         0000 00.. = Differentiated Services Codepoint: Default (0)
-//         .... ..00 = Explicit Congestion Notification: Not ECN-Capable Transport (0)
-//     Total Length: 84
-//     Identification: 0x8c9f (35999)
-//     000. .... = Flags: 0x0
-//     ...0 0000 0000 0000 = Fragment Offset: 0
-//     Time to Live: 64
-//     Protocol: ICMP (1)
-//     Header Checksum: 0xcecc [validation disabled]
-//     [Header checksum status: Unverified]
-//     Source Address: takaAir.local (192.168.0.150)
-//     Destination Address: www.google.com (142.250.207.4)
+func peelIPHeader(b []byte) []byte {
+	// IP packetのheaderは固定の20byte + optionである.
+	// Optionヘッダは通常使われないため，今回は20byte以降をICMP packetとみなす
+	// FIXME: it can't parse with IP option header
+	return b[20:]
+}
