@@ -8,9 +8,14 @@ import (
 )
 
 func DoPing(IPv4String string) {
-	// TODO accept hostname
+	localIP := getLocalIP()
+	if localIP == nil {
+		log.Fatal("cannot find local ip")
+	}
+
+	// TODO accept hostname too
 	rAddr := net.ParseIP(IPv4String).To4()
-	conn, err := net.DialIP("ip:icmp", localAddr, &net.IPAddr{IP: rAddr})
+	conn, err := net.DialIP("ip:icmp", &net.IPAddr{IP: localIP}, &net.IPAddr{IP: rAddr})
 	if err != nil {
 		log.Fatal(err)
 	}
@@ -20,15 +25,15 @@ func DoPing(IPv4String string) {
 	if err != nil {
 		log.Fatal(err)
 	}
-
 	fmt.Printf("success %d bytes write\n", n)
+
 	buf := make([]byte, 80)
 	n, err = conn.Read(buf)
 	if err != nil {
 		log.Fatal(err)
 	}
-
 	fmt.Printf("success %d bytes read\n", n)
+
 	icmpPacketWithIPHeader := buf[:n+1]
 	// TODO parse as IP-packet, not peel
 	icmpPacketBytes := peelIPHeader(icmpPacketWithIPHeader)
@@ -41,9 +46,6 @@ func DoPing(IPv4String string) {
 		fmt.Println("received but invalid icmp response.")
 	}
 }
-
-// TODO: dynamic localhost ipAddr
-var localAddr = &net.IPAddr{IP: net.IPv4(192, 168, 0, 150)}
 
 type ICMPPacket struct {
 	Type           []byte
@@ -125,4 +127,25 @@ func validateChecksum(packet ICMPPacket) bool {
 	}
 	cs2 := checksum(p.Marshal())
 	return cs[0] == cs2[0] && cs[1] == cs2[1]
+}
+
+func getLocalIP() net.IP {
+	intf, err := net.InterfaceByName("en0")
+	if err != nil {
+		log.Fatal(err)
+	}
+	addrs, err := intf.Addrs()
+	if err != nil {
+		log.Fatal(err)
+	}
+	for _, ad := range addrs {
+		ipnet, ok := ad.(*net.IPNet)
+		if !ok {
+			continue
+		}
+		if ipnet.IP.To4() != nil {
+			return ipnet.IP
+		}
+	}
+	return nil
 }
