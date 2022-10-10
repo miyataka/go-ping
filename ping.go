@@ -38,6 +38,7 @@ func DoPing() {
 	fmt.Printf("received. Type: %x, Code: %x: Checksum: %x, Identifier: %x, SequenceNumber: %x, Data: %x", icmpPkt.Type, icmpPkt.Code, icmpPkt.Checksum, icmpPkt.Identifier, icmpPkt.SequenceNumber, icmpPkt.Data)
 }
 
+// TODO: dynamic localhost ipAddr
 //var localAddr = &net.IPAddr{IP: net.IPv4(192, 168, 0, 150)}
 var localAddr = &net.IPAddr{IP: net.IPv4(172, 20, 10, 4)}
 
