@@ -3,5 +3,5 @@
 ## what
 - this is toy project
 
-## rule
+## project rule
 - use only standard library
