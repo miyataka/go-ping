@@ -7,8 +7,10 @@ import (
 	"net"
 )
 
-func DoPing() {
-	conn, err := net.DialIP("ip:icmp", localAddr, &net.IPAddr{IP: net.IPv4(192, 168, 0, 1)})
+func DoPing(IPv4String string) {
+	// TODO accept hostname
+	rAddr := net.ParseIP(IPv4String).To4()
+	conn, err := net.DialIP("ip:icmp", localAddr, &net.IPAddr{IP: rAddr})
 	if err != nil {
 		log.Fatal(err)
 	}
@@ -18,15 +20,17 @@ func DoPing() {
 	if err != nil {
 		log.Fatal(err)
 	}
+
 	fmt.Printf("success %d bytes write\n", n)
 	buf := make([]byte, 80)
 	n, err = conn.Read(buf)
 	if err != nil {
 		log.Fatal(err)
 	}
+
 	fmt.Printf("success %d bytes read\n", n)
 	icmpPacketWithIPHeader := buf[:n+1]
-
+	// TODO parse as IP-packet, not peel
 	icmpPacketBytes := peelIPHeader(icmpPacketWithIPHeader)
 	icmpPacket := parseICMPPacket(icmpPacketBytes)
 
