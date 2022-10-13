@@ -2,6 +2,7 @@ package ping
 
 import (
 	"encoding/binary"
+	"errors"
 	"fmt"
 	"log"
 	"net"
@@ -19,9 +20,10 @@ func DoPing(IPv4String string) {
 	if err != nil {
 		log.Fatal(err)
 	}
-	packet := NewPingICMPPacket()
 
-	n, err := conn.Write(packet.Marshal())
+	p := NewPingICMPPacket()
+	b, _ := Marshal(p)
+	n, err := conn.Write(b)
 	if err != nil {
 		log.Fatal(err)
 	}
@@ -78,20 +80,26 @@ func NewPingICMPPacket() ICMPPacket {
 	}
 
 	iPkt := ICMPPacket(pp)
-	pb := iPkt.Marshal()
+	pb, _ := Marshal(iPkt)
 	pp.Checksum = checksum(pb)
 	return pp
 }
 
-func (p *ICMPPacket) Marshal() []byte {
-	var b []byte
-	b = append(b, p.Type...)
-	b = append(b, p.Code...)
-	b = append(b, p.Checksum...)
-	b = append(b, p.Identifier...)
-	b = append(b, p.SequenceNumber...)
-	b = append(b, p.Data...)
-	return b
+// Marshal signature is same "encoding/json" package Marshal
+func Marshal(p any) ([]byte, error) {
+	switch v := p.(type) {
+	case ICMPPacket:
+		var b []byte
+		b = append(b, v.Type...)
+		b = append(b, v.Code...)
+		b = append(b, v.Checksum...)
+		b = append(b, v.Identifier...)
+		b = append(b, v.SequenceNumber...)
+		b = append(b, v.Data...)
+		return b, nil
+	default:
+		return nil, errors.New("its type cannot handle")
+	}
 }
 
 // マスタリングTCP/IP 第6版 p180
@@ -125,7 +133,8 @@ func validateChecksum(packet ICMPPacket) bool {
 		Identifier:     packet.Identifier,
 		SequenceNumber: packet.SequenceNumber,
 	}
-	cs2 := checksum(p.Marshal())
+	b, _ := Marshal(p)
+	cs2 := checksum(b)
 	return cs[0] == cs2[0] && cs[1] == cs2[1]
 }
 
