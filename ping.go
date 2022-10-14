@@ -8,15 +8,25 @@ import (
 	"net"
 )
 
-func DoPing(IPv4String string) {
+func DoPing(IPv4OrHostname string) {
 	localIP := getLocalIP()
 	if localIP == nil {
 		log.Fatal("cannot find local ip")
 	}
 
-	// TODO accept hostname too
-	rAddr := net.ParseIP(IPv4String).To4()
-	conn, err := net.DialIP("ip:icmp", &net.IPAddr{IP: localIP}, &net.IPAddr{IP: rAddr})
+	ipv4 := net.ParseIP(IPv4OrHostname)
+	if ipv4 == nil { // IPv4OrHostname is hostname
+		addrs, err := net.LookupHost(IPv4OrHostname)
+		if err != nil {
+			log.Fatal(err)
+		}
+		if len(addrs) == 0 {
+			log.Fatal(fmt.Sprintf("cannot resolve hostname: %s", IPv4OrHostname))
+		}
+		ipv4 = net.ParseIP(addrs[0])
+	}
+
+	conn, err := net.DialIP("ip:icmp", &net.IPAddr{IP: localIP}, &net.IPAddr{IP: ipv4.To4()})
 	if err != nil {
 		log.Fatal(err)
 	}
@@ -39,7 +49,7 @@ func DoPing(IPv4String string) {
 	ipv4Bytes := buf[:n+1]
 	_, body, err := parseIPv4Packet(ipv4Bytes)
 	if err != nil {
-		return
+		log.Fatal(err)
 	}
 	icmpPacket := parseICMPPacket(body)
 
