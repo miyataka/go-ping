@@ -36,10 +36,12 @@ func DoPing(IPv4String string) {
 	}
 	fmt.Printf("success %d bytes read\n", n)
 
-	icmpPacketWithIPHeader := buf[:n+1]
-	// TODO parse as IP-packet, not peel
-	icmpPacketBytes := peelIPHeader(icmpPacketWithIPHeader)
-	icmpPacket := parseICMPPacket(icmpPacketBytes)
+	ipv4Bytes := buf[:n+1]
+	_, body, err := parseIPv4Packet(ipv4Bytes)
+	if err != nil {
+		return
+	}
+	icmpPacket := parseICMPPacket(body)
 
 	if validateChecksum(icmpPacket) {
 		fmt.Printf("received. Type: %x, Code: %x: Checksum: %x, Identifier: %x, SequenceNumber: %x, Data: %x",
@@ -117,11 +119,43 @@ func checksum(b []byte) []byte {
 	return cs
 }
 
-func peelIPHeader(b []byte) []byte {
-	// IP packetのheaderは固定の20byte + optionである.
-	// Optionヘッダは通常使われないため，今回は20byte以降をICMP packetとみなす
-	// FIXME: it can't parse with IP option header
-	return b[20:]
+// IPv4Packet is IP version 4 header struct
+type IPv4Packet struct {
+	VersionAndHeaderLength []byte // version(4bit), headerLength(4bit)
+	DSCPAndECN             []byte // dscp(6bit), ecn(2bit)
+	TotalLength            []byte // 16bit
+	Identification         []byte // 16bit
+	FlagsAndFragmentOffset []byte // flags(3bit), fragmentOffset(13bit)
+	TTL                    []byte // 8bit
+	Protocol               []byte // 8bit
+	Checksum               []byte // 16bit
+	SrcAddress             []byte // 32bit
+	DstAddress             []byte // 32bit
+	Options                []byte // n bit, basically 0 bit
+	Padding                []byte // min(32-n, 0) bit, basically 0 bit
+}
+
+func parseIPv4Packet(b []byte) (IPv4Packet, []byte, error) {
+	ipp := IPv4Packet{
+		VersionAndHeaderLength: b[0:1],
+		DSCPAndECN:             b[1:2],
+		TotalLength:            b[2:4],
+		Identification:         b[4:6],
+		FlagsAndFragmentOffset: b[6:8],
+		TTL:                    b[8:9],
+		Protocol:               b[9:10],
+		Checksum:               b[10:12],
+		SrcAddress:             b[12:16],
+		DstAddress:             b[16:20],
+	}
+	hl := b[0] << 4 >> 4 // bit-shiftで右4bitだけ残す
+	if hl == 5 {
+		return ipp, b[20:], nil
+	} else if hl > 5 {
+		return IPv4Packet{}, nil, errors.New("IPv4 option-header cannot handle")
+	} else {
+		return IPv4Packet{}, nil, errors.New("invalid header length")
+	}
 }
 
 func validateChecksum(packet ICMPPacket) bool {
